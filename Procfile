@@ -1,0 +1,1 @@
+web: gunicorn stock_analyzer_app:server
