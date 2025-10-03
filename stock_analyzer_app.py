@@ -100,17 +100,23 @@ def update_analysis_output(n_clicks, ticker, start_date, end_date):
         stock_data.ta.sma(length=50, append=True)
         stock_data.ta.rsi(length=14, append=True)
         stock_data.ta.macd(fast=12, slow=26, signal=9, append=True)
-        # Calculate Bollinger Bands safely
         bollinger = stock_data.ta.bbands(length=20)
         if bollinger is not None and not bollinger.empty:
             stock_data = pd.concat([stock_data, bollinger], axis=1)
 
         # --- Generate Buy/Sell Signals (MA Crossover) ---
-        stock_data['signal'] = 0
-        stock_data.loc[stock_data['SMA_20'] > stock_data['SMA_50'], 'signal'] = 1  # Buy signal
-        stock_data.loc[stock_data['SMA_20'] < stock_data['SMA_50'], 'signal'] = -1 # Sell signal
-        buy_signals = stock_data[stock_data['signal'] == 1]
-        sell_signals = stock_data[stock_data['signal'] == -1]
+        # *** FIX: Check if SMA columns exist before creating signals ***
+        if 'SMA_20' in stock_data.columns and 'SMA_50' in stock_data.columns:
+            stock_data['signal'] = 0
+            stock_data.loc[stock_data['SMA_20'] > stock_data['SMA_50'], 'signal'] = 1  # Buy signal
+            stock_data.loc[stock_data['SMA_20'] < stock_data['SMA_50'], 'signal'] = -1 # Sell signal
+            buy_signals = stock_data[stock_data['signal'] == 1]
+            sell_signals = stock_data[stock_data['signal'] == -1]
+        else:
+            # If SMAs don't exist, create empty dataframes for signals
+            buy_signals = pd.DataFrame()
+            sell_signals = pd.DataFrame()
+
 
         # --- Create Price Action Candlestick Chart ---
         candlestick_fig = go.Figure()
@@ -118,24 +124,26 @@ def update_analysis_output(n_clicks, ticker, start_date, end_date):
                                              open=stock_data['Open'], high=stock_data['High'],
                                              low=stock_data['Low'], close=stock_data['Close'],
                                              name='Price'))
-        # Add moving averages if they exist
+        # *** FIX: Check if SMA columns exist before plotting them ***
         if 'SMA_20' in stock_data.columns:
             candlestick_fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['SMA_20'],
                                                mode='lines', name='20-Day SMA', line=dict(color='yellow', width=1)))
         if 'SMA_50' in stock_data.columns:
             candlestick_fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['SMA_50'],
                                                mode='lines', name='50-Day SMA', line=dict(color='orange', width=1)))
-        # Add Bollinger Bands if they exist
         if 'BBL_20_2.0' in stock_data.columns and 'BBU_20_2.0' in stock_data.columns:
             candlestick_fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['BBL_20_2.0'],
                                                mode='lines', name='Lower Bollinger Band', line=dict(color='cyan', width=1, dash='dash')))
             candlestick_fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['BBU_20_2.0'],
                                                mode='lines', name='Upper Bollinger Band', line=dict(color='cyan', width=1, dash='dash')))
-        # Plot buy/sell signals
-        candlestick_fig.add_trace(go.Scatter(x=buy_signals.index, y=buy_signals['Close'],
-                                           mode='markers', name='Buy Signal', marker=dict(color='green', symbol='triangle-up', size=10)))
-        candlestick_fig.add_trace(go.Scatter(x=sell_signals.index, y=sell_signals['Close'],
-                                           mode='markers', name='Sell Signal', marker=dict(color='red', symbol='triangle-down', size=10)))
+        
+        # Plot buy/sell signals if they exist
+        if not buy_signals.empty:
+            candlestick_fig.add_trace(go.Scatter(x=buy_signals.index, y=buy_signals['Close'],
+                                               mode='markers', name='Buy Signal', marker=dict(color='green', symbol='triangle-up', size=10)))
+        if not sell_signals.empty:
+            candlestick_fig.add_trace(go.Scatter(x=sell_signals.index, y=sell_signals['Close'],
+                                               mode='markers', name='Sell Signal', marker=dict(color='red', symbol='triangle-down', size=10)))
 
         candlestick_fig.update_layout(title=f'{ticker.upper()} - Price Action & Signals',
                                     xaxis_title='Date', yaxis_title='Price',
